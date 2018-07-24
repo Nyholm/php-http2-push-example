@@ -32,7 +32,7 @@ class H2PushCache {
       $found = curl_getinfo($handle)['url'];
     }
 
-    static::$cache[$found] = curl_multi_getcontent($handle);
+    static::$cache[$found] = 'noop';//curl_multi_getcontent($handle);
   }
 
   static function exists($url)
@@ -85,6 +85,12 @@ function get_request($url)
     CURLOPT_RETURNTRANSFER, 1
   );
 
+  curl_setopt($ch, CURLOPT_HEADER, false);
+
+  curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data)  {
+      echo 'Write';
+  });
+
   curl_multi_add_handle($mh, $ch);
 
   $active = null;
@@ -112,10 +118,11 @@ function get_request($url)
   return H2PushCache::get($url);
 }
 
-$url = 'https://example/post/1';
+$url = 'https://http2.golang.org/serverpush';
 $response = get_request($url);
-$post = json_decode($response);
-$response = get_request($post->comments);
-$comments = json_decode($reponse);
-$response = get_request($post->author);
-$author = json_decode($response);
+$x = 'noop';
+//$post = json_decode($response);
+//$response = get_request($post->comments);
+//$comments = json_decode($reponse);
+//$response = get_request($post->author);
+//$author = json_decode($response);
