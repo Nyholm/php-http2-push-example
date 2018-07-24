@@ -82,7 +82,7 @@ function get_request($url)
     CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2
   );
   curl_setopt($ch,
-    CURLOPT_RETURNTRANSFER, 1
+    CURLOPT_RETURNTRANSFER, 0
   );
 
   curl_setopt($ch, CURLOPT_HEADER, false);
