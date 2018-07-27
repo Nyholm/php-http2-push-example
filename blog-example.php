@@ -1,114 +1,48 @@
 <?php
 
-class H2PushCache
-{
-    static $cache = [];
-    static $pushHandles = [];
-
-    static function addPushHandle($headers, $handle)
-    {
-        foreach ($headers as $header) {
-            if (strpos($header, ':path:') === 0) {
-                $path = substr($header, 6);
-                $url = curl_getinfo($handle)['url'];
-                $url = str_replace(
-                    parse_url($url, PHP_URL_PATH),
-                    $path,
-                    $url
-                );
-                static::$pushHandles[$url] = $handle;
-            }
-        }
-    }
-
-    static function add($handle)
-    {
-        $found = false;
-        foreach (static::$pushHandles as $url => $h) {
-            if ($handle == $h) {
-                $found = $url;
-            }
-        }
-
-        if (!$found) {
-            $found = curl_getinfo($handle)['url'];
-        }
-
-        static::$cache[$found] = curl_multi_getcontent($handle);
-    }
-
-    static function exists($url)
-    {
-        if (isset(static::$cache[$url])) {
-            return true;
-        }
-
-        return false;
-    }
-
-    static function get($url)
-    {
-        return static::$cache[$url];
-    }
-}
-
 function get_request($url)
 {
-    if (H2PushCache::exists($url)) {
-        return H2PushCache::get($url);
-    }
-
-    $transfers = 1;
-    $cb = function ($parent, $pushed, $headers) use (&$transfers) {
-        $transfers++; // increment to keep track of the number of concurrent requests
-
-        H2PushCache::addPushHandle($headers, $pushed);
+    $cb = function ($parent, $pushed, $headers) {
+        curl_setopt($pushed, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($pushed, CURLOPT_HEADER, true);
+        curl_setopt($pushed, CURLOPT_HEADERFUNCTION, null);
+        curl_setopt($pushed, CURLOPT_WRITEFUNCTION, null);
 
         return CURL_PUSH_OK;
     };
 
     $mh = curl_multi_init();
 
-    curl_multi_setopt(
-        $mh,
-        CURLMOPT_PIPELINING,
-        CURLPIPE_MULTIPLEX
-    );
-    curl_multi_setopt(
-        $mh,
-        CURLMOPT_PUSHFUNCTION,
-        $cb
-    );
+    curl_multi_setopt($mh, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
+    curl_multi_setopt($mh, CURLMOPT_PUSHFUNCTION, $cb);
 
-    $ch = curl_init();
-    curl_setopt(
-        $ch,
-        CURLOPT_URL,
-        $url
-    );
-    curl_setopt(
-        $ch,
-        CURLOPT_HTTP_VERSION,
-        CURL_HTTP_VERSION_2
-    );
-    curl_setopt(
-        $ch,
-        CURLOPT_RETURNTRANSFER,
-        0
-    );
+    $curl = curl_init();
+    curl_reset($curl);
+    curl_setopt($curl, CURLOPT_URL, $url);
+    curl_setopt($curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2);
+    curl_setopt($curl, CURLOPT_FOLLOWLOCATION, false);
+    curl_setopt($curl, CURLOPT_MAXREDIRS, 0);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 1);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 2);
+    curl_setopt($curl, CURLOPT_TIMEOUT, 30);
+    curl_setopt($curl, CURLOPT_HTTPGET, true);
+    curl_setopt($curl, CURLOPT_CUSTOMREQUEST, true);
 
-    curl_setopt($ch, CURLOPT_HEADER, false);
+    curl_setopt($curl, CURLOPT_HEADERFUNCTION, function ($ch, $data) {
+        return strlen($data);
+    });
+    curl_setopt($curl, CURLOPT_WRITEFUNCTION, function ($ch, $data) {
+        return strlen($data);
+    });
+    curl_setopt($curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    curl_setopt($curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    curl_setopt($curl, CURLOPT_HEADER, false);
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($curl, CURLOPT_FAILONERROR, false);
 
-    curl_setopt(
-        $ch,
-        CURLOPT_WRITEFUNCTION,
-        function ($ch, $data) {
-            echo 'Write';
-        }
-    );
+    curl_multi_add_handle($mh, $curl);
 
-    curl_multi_add_handle($mh, $ch);
-
+    $content = null;
     $active = null;
     do {
         $mrc = curl_multi_exec($mh, $active);
@@ -124,8 +58,8 @@ function get_request($url)
             if ($info['msg'] == CURLMSG_DONE) {
                 $handle = $info['handle'];
                 if ($handle !== null) {
-                    $transfers--; // decrement remaining requests
-                    H2PushCache::add($handle);
+                    $content = curl_multi_getcontent($handle);
+
                     curl_multi_remove_handle($mh, $handle);
                     curl_close($handle);
                 }
@@ -137,13 +71,11 @@ function get_request($url)
 
     curl_multi_close($mh);
 
-    return H2PushCache::get($url);
+    return $content;
 }
 
 $url = 'https://http2.golang.org/serverpush';
-$url = 'https://symfony.fi/';
 $response = get_request($url);
-$x = 'noop';
 //$post = json_decode($response);
 //$response = get_request($post->comments);
 //$comments = json_decode($reponse);
