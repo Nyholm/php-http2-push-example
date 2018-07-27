@@ -1,5 +1,41 @@
 <?php
 
+$urls = [];
+
+function parseUrl($headers, $handle)
+{
+    global $urls;
+    foreach ($headers as $header) {
+        if (strpos($header, ':path:') === 0) {
+            $path = substr($header, 6);
+            $url = curl_getinfo($handle)['url'];
+            $url = str_replace(
+                parse_url($url, PHP_URL_PATH),
+                $path,
+                $url
+            );
+            $urls[$url] = $handle;
+        }
+    }
+}
+
+function getUrl($handle)
+{
+    $found = false;
+    global $urls;
+    foreach ($urls as $url => $h) {
+        if ($handle == $h) {
+            $found = $url;
+        }
+    }
+    if (!$found) {
+        $found = curl_getinfo($handle)['url'];
+    }
+
+    return $found;
+}
+
+
 function get_request($url)
 {
     $cb = function ($parent, $pushed, $headers) {
@@ -7,6 +43,8 @@ function get_request($url)
         curl_setopt($pushed, CURLOPT_HEADER, true);
         curl_setopt($pushed, CURLOPT_HEADERFUNCTION, null);
         curl_setopt($pushed, CURLOPT_WRITEFUNCTION, null);
+
+        parseUrl($headers, $pushed);
 
         return CURL_PUSH_OK;
     };
@@ -28,17 +66,22 @@ function get_request($url)
     curl_setopt($curl, CURLOPT_HTTPGET, true);
     curl_setopt($curl, CURLOPT_CUSTOMREQUEST, true);
 
-    curl_setopt($curl, CURLOPT_HEADERFUNCTION, function ($ch, $data) {
-        return strlen($data);
-    });
-    curl_setopt($curl, CURLOPT_WRITEFUNCTION, function ($ch, $data) {
-        return strlen($data);
-    });
     curl_setopt($curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
     curl_setopt($curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
     curl_setopt($curl, CURLOPT_HEADER, false);
-    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, false);
     curl_setopt($curl, CURLOPT_FAILONERROR, false);
+
+    curl_setopt($curl, CURLOPT_HEADERFUNCTION, function ($ch, $data) {
+        return strlen($data);
+    });
+
+    $originalResponseContent = '';
+
+    curl_setopt($curl, CURLOPT_WRITEFUNCTION, function ($ch, $data) use (&$originalResponseContent) {
+        $originalResponseContent .= $data;
+        return strlen($data);
+    });
 
     curl_multi_add_handle($mh, $curl);
 
@@ -59,6 +102,10 @@ function get_request($url)
                 $handle = $info['handle'];
                 if ($handle !== null) {
                     $content = curl_multi_getcontent($handle);
+                    $url = getUrl($handle);
+
+                    // Debug
+                    echo strlen($content).': '.$url."\n";
 
                     curl_multi_remove_handle($mh, $handle);
                     curl_close($handle);
@@ -71,13 +118,10 @@ function get_request($url)
 
     curl_multi_close($mh);
 
-    return $content;
+    return $originalResponseContent;
 }
 
 $url = 'https://http2.golang.org/serverpush';
 $response = get_request($url);
-//$post = json_decode($response);
-//$response = get_request($post->comments);
-//$comments = json_decode($reponse);
-//$response = get_request($post->author);
-//$author = json_decode($response);
+
+echo strlen($response).': '.$url."\n\n";
