@@ -42,7 +42,7 @@ function get_request($url)
         curl_setopt($pushed, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($pushed, CURLOPT_HEADER, true);
 
-        // These two lines will cause segmentation fault
+        //FIXME These two lines will cause segmentation fault
         //curl_setopt($pushed, CURLOPT_HEADERFUNCTION, null);
         //curl_setopt($pushed, CURLOPT_WRITEFUNCTION, null);
 
@@ -74,12 +74,12 @@ function get_request($url)
     $originalResponseContent = '';
 
 
-    // Using timeout will weirdly disable pushed responses (content will be empty)
+    //FIXME Using timeout will weirdly disable pushed responses (content will be empty)
     //curl_setopt($curl, CURLOPT_TIMEOUT, 30);
 
     // -----------
-    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-    // These 2 lines will case segmentation fault
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, false);
+    //FIXME These 2 lines will case segmentation fault
     curl_setopt($curl, CURLOPT_HEADERFUNCTION, function ($ch, $data) {
         return strlen($data);
     });
