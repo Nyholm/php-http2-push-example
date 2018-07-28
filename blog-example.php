@@ -41,8 +41,10 @@ function get_request($url)
     $cb = function ($parent, $pushed, $headers) {
         curl_setopt($pushed, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($pushed, CURLOPT_HEADER, true);
-        curl_setopt($pushed, CURLOPT_HEADERFUNCTION, null);
-        curl_setopt($pushed, CURLOPT_WRITEFUNCTION, null);
+
+        // These two lines will cause segmentation fault
+        //curl_setopt($pushed, CURLOPT_HEADERFUNCTION, null);
+        //curl_setopt($pushed, CURLOPT_WRITEFUNCTION, null);
 
         parseUrl($headers, $pushed);
 
@@ -62,22 +64,25 @@ function get_request($url)
     curl_setopt($curl, CURLOPT_MAXREDIRS, 0);
     curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 1);
     curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 2);
-    curl_setopt($curl, CURLOPT_TIMEOUT, 30);
     curl_setopt($curl, CURLOPT_HTTPGET, true);
     curl_setopt($curl, CURLOPT_CUSTOMREQUEST, true);
 
     curl_setopt($curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
     curl_setopt($curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
     curl_setopt($curl, CURLOPT_HEADER, false);
-    curl_setopt($curl, CURLOPT_RETURNTRANSFER, false);
     curl_setopt($curl, CURLOPT_FAILONERROR, false);
+    $originalResponseContent = '';
 
+
+    // Using timeout will weirdly disable pushed responses (content will be empty)
+    //curl_setopt($curl, CURLOPT_TIMEOUT, 30);
+
+    // -----------
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+    // These 2 lines will case segmentation fault
     curl_setopt($curl, CURLOPT_HEADERFUNCTION, function ($ch, $data) {
         return strlen($data);
     });
-
-    $originalResponseContent = '';
-
     curl_setopt($curl, CURLOPT_WRITEFUNCTION, function ($ch, $data) use (&$originalResponseContent) {
         $originalResponseContent .= $data;
         return strlen($data);
@@ -85,6 +90,8 @@ function get_request($url)
 
     curl_multi_add_handle($mh, $curl);
 
+
+    // Start fetching the responses.
     $content = null;
     $active = null;
     do {
